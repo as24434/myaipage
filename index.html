@@ -1,1 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Responsive Photo Editor (Fabric.js)</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.0/fabric.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+
+  <style>
+    body {
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      font-family: Arial, sans-serif;
+    }
+
+    .container {
+      display: flex;
+      flex: 1;
+    }
+
+    .sidebar {
+      width: 60px;
+      background: #2a2a2a;
+      color: white;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 10px 0;
+    }
+
+    .sidebar button {
+      background: none;
+      border: none;
+      color: white;
+      margin: 10px 0;
+      font-size: 20px;
+      cursor: pointer;
+    }
+
+    .main-content {
+      flex-grow: 1;
+      background: #1e1e1e;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      position: relative;
+      min-width: 300px;
+    }
+
+    canvas {
+      border: 2px solid #333;
+    }
+
+    .prompt-sidebar {
+      width: 250px;
+      background: #2a2a2a;
+      color: white;
+      display: flex;
+      flex-direction: column;
+      padding: 20px;
+      height: 100%;
+    }
+
+    .prompt-sidebar label,
+    .prompt-sidebar textarea {
+      width: 100%;
+    }
+
+    .footer {
+      display: none;
+    }
+
+    .preset-sizes {
+      margin-top: 5px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+    }
+
+    .preset-sizes button {
+      background: #555;
+      color: white;
+      border: none;
+      padding: 3px 5px;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+
+    .menu-select {
+      background: #444;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 8px 5px;
+      margin-top: 10px;
+      width: 48px;
+      writing-mode: vertical-rl;
+      text-orientation: mixed;
+      transform: rotate(180deg);
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .menu-select option {
+      color: black;
+    }
+
+    .menu-select:hover {
+      background: #666;
+    }
+
+    .menu-select:focus {
+      outline: 2px solid #007bff;
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="container">
+  <div class="sidebar">
+    <button onclick="toolAction('Home')">🏠</button>
+    <button onclick="toolAction('Open')">📂</button>
+    <button onclick="toolAction('Transform')">🔄</button>
+    <button onclick="toolAction('Brush')">🖌️</button>
+    <button onclick="toolAction('Undo')"><i class="fas fa-undo"></i></button>
+    <button onclick="toolAction('Redo')"><i class="fas fa-redo"></i></button>
+    <button onclick="toolAction('Save')"><i class="fas fa-save"></i></button>
+    <button onclick="updatePrompt('1:1')">1:1</button>
+    <button onclick="updatePrompt('4:3')">4:3</button>
+    <button onclick="updatePrompt('3:4')">3:4</button>
+    <button onclick="updatePrompt('16:9')">16:9</button>
+    <button onclick="updatePrompt('9:16')">9:16</button>
+  </div>
+
+  <div class="main-content">
+    <canvas id="editor-canvas" width="500" height="400"></canvas>
+  </div>
+
+  <div class="prompt-sidebar">
+    <div class="upload-section">
+      <label>Upload an image</label>
+      <input type="file" id="file-input">
+
+      <label>Previous Image Preview</label>
+      <div id="preview-container" style="width:300px;height:300px;border:1px solid #555;background:#ddd;display:flex;align-items:center;justify-content:center;overflow:hidden;">
+        <span style="color:#777;">No previous image</span>
+      </div>
+
+      <label>Enter your prompt</label>
+      <textarea id="prompt-textarea" rows="3" placeholder="Example: make sky red, add flowers..."></textarea>
+
+      <button id="clear-content-btn" style="background:#dc3545;color:white;">Clear Content</button>
+      <button id="generate-btn" style="background:#8000ff;color:white;">Generate</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const canvas = new fabric.Canvas('editor-canvas', {
+    backgroundColor: '#fff',
+    preserveObjectStacking: true
+  });
+
+  function updatePrompt(size) {
+    document.getElementById('prompt-textarea').textContent = 'Selected Size: ' + size;
+  }
+
+  canvas.on('path:created', function (e) {
+    const path = e.path;
+    const bounds = path.getBoundingRect();
+    const width = bounds.width;
+    const height = bounds.height;
+    const area = Math.round(width * height);
+
+    const textarea = document.getElementById('prompt-textarea');
+    textarea.value += `\n🖌️ Brush stroke area: ${width.toFixed(1)}px × ${height.toFixed(1)}px ≈ ${area} px²`;
+    saveState();
+  });
+
+  function toolAction(action) {
+    switch (action) {
+      case 'Home':
+        canvas.clear();
+        canvas.backgroundColor = '#fff';
+        canvas.renderAll();
+        document.getElementById('prompt-textarea').value = 'Canvas cleared';
+        break;
+      case 'Open':
+        document.getElementById('file-input').click();
+        break;
+      case 'Transform':
+        alert('Select an object and use corner controls to resize/rotate');
+        break;
+      case 'Brush':
+        canvas.isDrawingMode = !canvas.isDrawingMode;
+        alert('Brush ' + (canvas.isDrawingMode ? 'enabled' : 'disabled'));
+        break;
+      case 'Undo':
+        undo();
+        break;
+      case 'Redo':
+        redo();
+        break;
+      case 'Save':
+        const dataURL = canvas.toDataURL({
+          format: 'png',
+          quality: 1
+        });
+        const link = document.createElement('a');
+        link.href = dataURL;
+        link.download = 'edited_image.png';
+        link.click();
+        break;
+    }
+  }
+
+  document.getElementById('file-input').addEventListener('change', function (e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function (f) {
+      fabric.Image.fromURL(f.target.result, function (img) {
+        fitImageToCanvas(img);
+      });
+    };
+    reader.readAsDataURL(file);
+  });
+
+  function fitImageToCanvas(img) {
+    const canvasWidth = canvas.getWidth();
+    const canvasHeight = canvas.getHeight();
+    const imgAspect = img.width / img.height;
+    const canvasAspect = canvasWidth / canvasHeight;
+
+    let scale;
+    if (imgAspect >= canvasAspect) {
+      scale = canvasWidth / img.width;
+    } else {
+      scale = canvasHeight / img.height;
+    }
+
+    img.scale(scale);
+    canvas.add(img);
+    canvas.centerObject(img);
+    img.setCoords();
+    canvas.renderAll();
+
+    document.getElementById('prompt-textarea').value = `Image uploaded and fitted to canvas (${Math.round(img.width * scale)}x${Math.round(img.height * scale)})`;
+    saveState();
+  }
+
+  let state = [];
+  let mods = 0;
+
+  canvas.on('object:added', saveState);
+  canvas.on('object:modified', saveState);
+  canvas.on('object:removed', saveState);
+
+  function saveState() {
+    if (mods < state.length) {
+      state = state.slice(0, mods);
+    }
+    state.push(JSON.stringify(canvas));
+    mods = state.length;
+  }
+
+  function undo() {
+    if (mods < 2) return;
+    mods -= 1;
+    canvas.loadFromJSON(state[mods - 1], () => canvas.renderAll());
+  }
+
+  function redo() {
+    if (mods >= state.length) return;
+    canvas.loadFromJSON(state[mods], () => canvas.renderAll());
+    mods += 1;
+  }
+
+  document.getElementById('clear-content-btn').addEventListener('click', function () {
+    document.getElementById('prompt-textarea').value = '';
+     // Clear prompt textarea
+  document.getElementById('prompt-textarea').value = '';
+
+// Clear canvas (new image)
+canvas.clear();
+canvas.backgroundColor = '#fff';
+canvas.renderAll();
+
+// Clear preview box (old image)
+const previewContainer = document.getElementById('preview-container');
+previewContainer.innerHTML = '<span style="color:#777;">No previous image</span>';
+    const active = canvas.getActiveObject();
+    if (active) {
+      canvas.remove(active);
+      canvas.discardActiveObject();
+      canvas.renderAll();
+    }
+    alert('Prompt content cleared and selected canvas object removed (if any)');
+  });
+
+  document.getElementById('generate-btn').addEventListener('click', function () {
+    const prompt = document.getElementById('prompt-textarea').value;
+
+    if (canvas.getObjects().length === 0) {
+      alert('No image on canvas to generate from.');
+      return;
+    }
+
+    // Step 1: Get current canvas image as DataURL
+    const dataURL = canvas.toDataURL({
+      format: 'png',
+      quality: 1
+    });
+
+    // Step 2: Show old image in preview box
+    const previewContainer = document.getElementById('preview-container');
+    previewContainer.innerHTML = ''; // Clear old preview
+
+    const imgEl = document.createElement('img');
+    imgEl.src = dataURL;
+    imgEl.style.maxWidth = '100%';
+    imgEl.style.maxHeight = '100%';
+    previewContainer.appendChild(imgEl);
+
+    // Step 3: Simulate "generated" new image (invert colors for demo)
+    const image = new Image();
+    image.src = dataURL;
+    image.onload = function () {
+      canvas.clear();
+      canvas.backgroundColor = '#fff';
+
+      fabric.Image.fromURL(dataURL, function (img) {
+        img.filters.push(new fabric.Image.filters.Invert());
+        img.applyFilters();
+
+        fitImageToCanvas(img);
+        document.getElementById('prompt-textarea').value = 'Generated new image based on prompt: ' + prompt;
+        saveState();
+      });
+    };
+  });
+</script>
+
+</body>
+</html>
 
